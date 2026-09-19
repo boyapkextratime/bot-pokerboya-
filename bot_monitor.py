@@ -12,13 +12,14 @@ PASSWORD = "Menang123"
 
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
-# --- WEB SERVER UNTUK RENDER ---
+# --- WEB SERVER (AGAR RENDER TIDAK KOMPLAIN) ---
 async def start_web_server():
     app = web.Application()
     app.router.add_get('/', lambda r: web.Response(text="Bot is running!"))
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 10000)))
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
 
 # --- DAFTAR PROVIDER ---
@@ -92,13 +93,15 @@ async def run_check(p_data, page, context_browser):
     return "FAILED"
 
 async def start(update, context):
-    await update.message.reply_text("Bot Aktif! Gunakan:\n/check [KATEGORI]")
+    await update.message.reply_text("Bot Aktif! Gunakan /check [KATEGORI]")
+
+async def login_manual(update, context):
+    await update.message.reply_text("Silakan login di laptop Anda agar session.json terupdate.")
 
 async def check_category(update, context):
     if not context.args: return await update.message.reply_text("Pilih kategori!")
     cat_name = context.args[0].upper()
     if cat_name not in ALL_CATEGORIES: return await update.message.reply_text("Kategori tidak valid.")
-
     msg = await update.message.reply_text(f"Mengecek {cat_name}...")
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -106,29 +109,31 @@ async def check_category(update, context):
         page = await context_browser.new_page()
         await login_otomatis(page)
         await page.goto(ALL_CATEGORIES[cat_name]['url'], wait_until="networkidle")
-        
         results = []
         for p_data in ALL_CATEGORIES[cat_name]['providers']:
             status = await run_check(p_data, page, context_browser)
             results.append(f"• {p_data['name']}: {status}")
-            
         await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"Hasil {cat_name}:\n\n" + "\n".join(results))
         await context_browser.storage_state(path="session.json")
         await browser.close()
 
-if __name__ == '__main__':
-    # Pastikan loop berjalan
-    loop = asyncio.get_event_loop()
-    loop.create_task(start_web_server())
-    
+async def main():
     app = ApplicationBuilder().token(TOKEN).build()
-    
-    # TAMBAHKAN INI: Memaksa menghapus semua webhook sebelum polling
-    asyncio.run(app.bot.delete_webhook(drop_pending_updates=True))
-    
+    await app.bot.delete_webhook(drop_pending_updates=True)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("login", login_manual))
     app.add_handler(CommandHandler("check", check_category))
     
+    # Menjalankan polling
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling(drop_pending_updates=True)
     print("Bot sudah jalan!")
-    app.run_polling(drop_pending_updates=True)
+    
+    # Keep alive
+    await asyncio.Event().wait()
+
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    loop.create_task(start_web_server())
+    loop.run_until_complete(main())
