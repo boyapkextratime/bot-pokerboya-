@@ -183,6 +183,15 @@ async def check_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()
+    
+    # PERINTAH PENTING: Membuang semua antrean pesan lama di Telegram
+    # dan mematikan koneksi bot lain yang masih menyangkut
     app.bot.delete_webhook(drop_pending_updates=True)
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("login", login_manual))
     app.add_handler(CommandHandler("check", check_category))
+    
+    print("Bot sudah jalan!")
+    # drop_pending_updates=True akan memastikan bot mengabaikan pesan lama
     app.run_polling(drop_pending_updates=True)
