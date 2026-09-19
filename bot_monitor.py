@@ -6,7 +6,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from playwright.async_api import async_playwright
 
-TOKEN = "8473861493:AAH8G9mOub_SNGuDYbQZMPUnCd-qFybnABQ"
+TOKEN = "8473861493:AAEWKeVFXJN3ZjshjGXUlMkho3rLW_Q-oDc"
 USERNAME = "bangjo10"
 PASSWORD = "Menang123"
 
