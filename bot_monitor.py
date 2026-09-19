@@ -6,10 +6,11 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from playwright.async_api import async_playwright
 
+# Ganti dengan token bot terbaru Anda
 TOKEN = "8473861493:AAHGHJg50pyjG1aWiyueS-GXkW9txQYBerc"
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
-# --- WEB SERVER UNTUK RENDER ---
+# --- WEB SERVER MINI UNTUK RENDER ---
 async def health_check(request):
     return web.Response(text="Bot is running!")
 
@@ -18,7 +19,6 @@ async def start_web_server():
     app.router.add_get('/', health_check)
     runner = web.AppRunner(app)
     await runner.setup()
-    # Render menggunakan port yang diberikan oleh environment variable atau default 10000
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
@@ -36,9 +36,9 @@ ALL_CATEGORIES = {
     "ARCADE": {
         "url": "https://pokerboya.com/arcade",
         "providers": [
+            {"name": "JILI", "selector": "a[href='#vendor_JILI']"},
             {"name": "Pragmatic Play", "selector": "a[href='#vendor_PragmaticPlay']"},
             {"name": "PGSOFT", "selector": "a[href='#vendor_PGSOFT']"},
-            {"name": "JILI", "selector": "a[href='#vendor_JILI']"},
         ]
     },
     "SPORTSBOOK": {
@@ -71,7 +71,8 @@ async def run_check(p_data, page, context_browser):
     for attempt in range(3):
         try:
             if page.is_closed(): return "FAILED (Browser Closed)"
-            # Anti-Popup
+            
+            # Tutup Popup Promosi
             popup_close = await page.query_selector("button[aria-label='Close'], .modal-close, .close")
             if popup_close: await popup_close.click()
 
@@ -87,7 +88,10 @@ async def run_check(p_data, page, context_browser):
     return "FAILED"
 
 async def start(update, context):
-    await update.message.reply_text("Bot Aktif! Gunakan /check [KATEGORI]")
+    await update.message.reply_text("Bot Aktif! Gunakan:\n/login\n/check [KATEGORI]")
+
+async def login_manual(update, context):
+    await update.message.reply_text("Fitur login manual hanya bisa di laptop. Upload session.json hasil login Anda ke GitHub.")
 
 async def check_category(update, context):
     if not context.args: return await update.message.reply_text("Pilih kategori!")
@@ -97,7 +101,7 @@ async def check_category(update, context):
     msg = await update.message.reply_text(f"Mengecek {cat_name}...")
     
     async with async_playwright() as p:
-        # headless=True wajib untuk Render/Server agar tidak error
+        # headless=True wajib di Render
         browser = await p.chromium.launch(headless=True)
         context_browser = await browser.new_context(storage_state="session.json") if os.path.exists("session.json") else await browser.new_context()
         page = await context_browser.new_page()
@@ -107,19 +111,27 @@ async def check_category(update, context):
         for p_data in ALL_CATEGORIES[cat_name]['providers']:
             status = await run_check(p_data, page, context_browser)
             results.append(f"• {p_data['name']}: {status}")
+            if len(results) % 5 == 0:
+                await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"Mengecek {cat_name}...\n\n" + "\n".join(results))
         
-        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"Hasil {cat_name}:\n\n" + "\n".join(results))
-        await context_browser.storage_state(path="session.json")
+        final_text = f"Hasil {cat_name}:\n\n" + "\n".join(results)
+        for i in range(0, len(final_text), 4000):
+            await update.message.reply_text(final_text[i:i+4000])
         await browser.close()
 
 if __name__ == '__main__':
-    # Jalankan web server di background
+    # Jalankan server untuk Render
     loop = asyncio.get_event_loop()
     loop.create_task(start_web_server())
     
     app = ApplicationBuilder().token(TOKEN).build()
+    
+    # Menghapus antrean pesan lama dan konflik
+    app.bot.delete_webhook(drop_pending_updates=True)
+    
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("login", login_manual))
     app.add_handler(CommandHandler("check", check_category))
     
     print("Bot sudah jalan!")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
