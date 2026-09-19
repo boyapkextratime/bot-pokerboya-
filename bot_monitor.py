@@ -6,7 +6,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from playwright.async_api import async_playwright
 
-TOKEN = "8473861493:AAF6wOEcTNgorlsUCcrm-Cs9T1pX9fxAsY4"
+TOKEN = "8473861493:AAHGHJg50pyjG1aWiyueS-GXkW9txQYBerc"
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
 # --- WEB SERVER UNTUK RENDER ---
