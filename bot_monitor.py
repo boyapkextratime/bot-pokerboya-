@@ -7,7 +7,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from playwright.async_api import async_playwright
 
 # GANTI DENGAN TOKEN ANDA
-TOKEN = "8473861493:AAFbQGo4bovDwMC9omOj6Pchcw5-eMhYtQ0"
+TOKEN = "8473861493:AAH8G9mOub_SNGuDYbQZMPUnCd-qFybnABQ"
 USERNAME = "bangjo10"
 PASSWORD = "Menang123"
 
