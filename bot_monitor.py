@@ -6,24 +6,14 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from playwright.async_api import async_playwright
 
-# Ganti dengan token bot terbaru Anda
+# GANTI DENGAN TOKEN ANDA
 TOKEN = "8473861493:AAHGHJg50pyjG1aWiyueS-GXkW9txQYBerc"
+USERNAME = "bangjo10"
+PASSWORD = "Menang123"
+
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
-# --- WEB SERVER MINI UNTUK RENDER ---
-async def health_check(request):
-    return web.Response(text="Bot is running!")
-
-async def start_web_server():
-    app = web.Application()
-    app.router.add_get('/', health_check)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    port = int(os.environ.get("PORT", 10000))
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-
-# --- DAFTAR PROVIDER ---
+# --- KONFIGURASI KATEGORI (3 PROVIDER TIAP KATEGORI) ---
 ALL_CATEGORIES = {
     "SLOT": {
         "url": "https://pokerboya.com/egames",
@@ -67,18 +57,33 @@ ALL_CATEGORIES = {
     }
 }
 
+# --- FUNGSI LOGIN OTOMATIS ---
+async def login_otomatis(page):
+    try:
+        await page.goto("https://pokerboya.com/", wait_until="networkidle")
+        # Sesuaikan selector berdasarkan inspect element situs
+        if await page.query_selector("input[name='username']"):
+            await page.fill("input[name='username']", USERNAME)
+            await page.fill("input[name='password']", PASSWORD)
+            await page.click("button[type='submit']")
+            await page.wait_for_timeout(5000)
+    except:
+        pass
+
+# --- FUNGSI CEK PROVIDER ---
 async def run_check(p_data, page, context_browser):
     for attempt in range(3):
         try:
             if page.is_closed(): return "FAILED (Browser Closed)"
             
-            # Tutup Popup Promosi
-            popup_close = await page.query_selector("button[aria-label='Close'], .modal-close, .close")
-            if popup_close: await popup_close.click()
+            # Tutup popup promosi
+            popup = await page.query_selector("button[aria-label='Close'], .modal-close, .close")
+            if popup: await popup.click()
 
             await page.click(p_data['selector'], timeout=10000)
             await page.wait_for_timeout(6000)
             
+            # Verifikasi Lobby
             if len(context_browser.pages) > 1 or len(page.frames) > 1 or await page.query_selector("iframe"):
                 return "AMAN"
             raise Exception("Lobby tidak muncul")
@@ -87,50 +92,41 @@ async def run_check(p_data, page, context_browser):
             await page.wait_for_timeout(5000)
     return "FAILED"
 
-async def start(update, context):
-    await update.message.reply_text("Bot Aktif! Gunakan:\n/login\n/check [KATEGORI]")
-
-async def login_manual(update, context):
-    await update.message.reply_text("Fitur login manual hanya bisa di laptop. Upload session.json hasil login Anda ke GitHub.")
-
-async def check_category(update, context):
-    if not context.args: return await update.message.reply_text("Pilih kategori!")
+# --- HANDLER TELEGRAM ---
+async def check_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args: return await update.message.reply_text("Pilih kategori! Contoh: /check SLOT")
     cat_name = context.args[0].upper()
     if cat_name not in ALL_CATEGORIES: return await update.message.reply_text("Kategori tidak valid.")
 
     msg = await update.message.reply_text(f"Mengecek {cat_name}...")
     
     async with async_playwright() as p:
-        # headless=True wajib di Render
         browser = await p.chromium.launch(headless=True)
-        context_browser = await browser.new_context(storage_state="session.json") if os.path.exists("session.json") else await browser.new_context()
+        # Gunakan session.json jika ada, jika tidak, login manual dulu
+        if os.path.exists("session.json"):
+            context_browser = await browser.new_context(storage_state="session.json")
+        else:
+            context_browser = await browser.new_context()
+        
         page = await context_browser.new_page()
+        await login_otomatis(page)
         await page.goto(ALL_CATEGORIES[cat_name]['url'], wait_until="networkidle")
         
         results = []
         for p_data in ALL_CATEGORIES[cat_name]['providers']:
             status = await run_check(p_data, page, context_browser)
             results.append(f"• {p_data['name']}: {status}")
-            if len(results) % 5 == 0:
-                await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"Mengecek {cat_name}...\n\n" + "\n".join(results))
         
-        final_text = f"Hasil {cat_name}:\n\n" + "\n".join(results)
-        for i in range(0, len(final_text), 4000):
-            await update.message.reply_text(final_text[i:i+4000])
+        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"Hasil {cat_name}:\n\n" + "\n".join(results))
+        await context_browser.storage_state(path="session.json")
         await browser.close()
 
 if __name__ == '__main__':
-    # Jalankan server untuk Render
+    # Web server mini untuk Render
     loop = asyncio.get_event_loop()
-    loop.create_task(start_web_server())
-    
     app = ApplicationBuilder().token(TOKEN).build()
     
-    # Menghapus antrean pesan lama dan konflik
-    app.bot.delete_webhook(drop_pending_updates=True)
-    
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("login", login_manual))
+    # Register handler
     app.add_handler(CommandHandler("check", check_category))
     
     print("Bot sudah jalan!")
